@@ -91,6 +91,8 @@ class Yad2CarMonitor:
             
             # Selectors for total results counter (in order of preference)
             total_selectors = [
+                "span[data-testid='total-items']",
+                "span[class*='totalItems']",
                 "span.results-feed_sortAndTotalBox__lFFyS",  # Your provided selector
                 "span[class*='sortAndTotalBox']",
                 "span[class*='totalResults']",
@@ -135,6 +137,35 @@ class Yad2CarMonitor:
                     print(f"Extracted total: {total}")
                     return total
             
+            # Fallback 1: search any visible element containing Hebrew keywords and digits
+            print("Fallback: searching page elements for candidate texts containing 'תוצאות', 'מודעות' or 'נמצאו'")
+            try:
+                candidates = self.driver.find_elements(By.XPATH, "//*[contains(text(),'תוצאות') or contains(text(),'מודעות') or contains(text(),'נמצאו') or contains(text(),'תוצאה')]")
+                for elem in candidates:
+                    text = elem.text.strip()
+                    if not text:
+                        continue
+                    print(f"Candidate element text: {text}")
+                    nums = re.findall(r'\d+', text)
+                    if nums:
+                        total = int(nums[0])
+                        print(f"Extracted total from candidate: {total}")
+                        return total
+            except Exception:
+                pass
+
+            # Fallback 2: search page source for the pattern '123 תוצאות' or '123 מודעות'
+            print("Fallback: searching page source for numeric counter patterns")
+            try:
+                src = self.driver.page_source
+                m = re.search(r"(\d{1,6})\s*(תוצאות|מודעות|נמצאו|תוצאה)", src)
+                if m:
+                    total = int(m.group(1))
+                    print(f"Extracted total from page source: {total}")
+                    return total
+            except Exception:
+                pass
+
             print("Warning: Could not find total results counter")
             return None
             
