@@ -1,0 +1,84 @@
+name: Car Market Monitor
+
+on:
+  schedule:
+    # Run every 20 minutes from 6 AM to midnight (0:00)
+    # This gives you 54 checks per day instead of 48
+    - cron: '*/20 6-23 * * *'
+    
+    # Alternative schedules (uncomment one if preferred):
+    
+    # Every 15 minutes during business hours only (9 AM - 6 PM)
+    # - cron: '*/15 9-18 * * *'
+    
+    # Every 10 minutes during peak hours (6 AM - midnight)
+    # - cron: '*/10 6-23 * * *'
+  
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      debug_mode:
+        description: 'Run in debug mode'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  check-cars:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Download previous car data
+      uses: actions/download-artifact@v3
+      with:
+        name: seen-cars-data
+        path: .
+      continue-on-error: true
+    
+    - name: Run car scraper
+      env:
+        CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        STORAGE_FILE: seen_cars.json
+      run: |
+        python car_scraper.py
+    
+    - name: Upload car data for next run
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: seen-cars-data
+        path: seen_cars.json
+        retention-days: 30
+    
+    - name: Debug - Show scraped data
+      if: ${{ github.event.inputs.debug_mode == 'true' }}
+      run: |
+        echo "=== Seen Cars Data ==="
+        if [ -f seen_cars.json ]; then
+          cat seen_cars.json
+        else
+          echo "No data file found"
+        fi
