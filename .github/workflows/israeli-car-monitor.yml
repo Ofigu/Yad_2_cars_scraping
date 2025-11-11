@@ -1,46 +1,15 @@
-name: Israeli Car Market Monitor
+name: Car Monitor (Fixed)
 
 on:
   schedule:
-    # Optimal schedule for 6 AM - Midnight monitoring
-    # Choose ONE of these options:
-    
-    # OPTION 1: Every 20 minutes (RECOMMENDED for private repos)
-    # Uses ~1,620 minutes/month - well within 2,000 free limit
+    # Run every 20 minutes from 6 AM to midnight
     - cron: '*/20 6-23 * * *'
-    
-    # OPTION 2: Peak hours focus (uncomment to use)
-    # - cron: '*/15 9-17 * * *'    # Every 15 min during work hours
-    # - cron: '*/30 6-8,18-23 * * *'  # Every 30 min morning/evening
-    
-    # OPTION 3: Weekend vs Weekday (uncomment to use)
-    # - cron: '*/20 6-23 * * 1-5'  # Every 20 min Mon-Fri
-    # - cron: '*/15 8-22 * * 0,6'  # Every 15 min weekends
   
-  # Manual trigger with options
+  # Allow manual trigger
   workflow_dispatch:
-    inputs:
-      use_selenium:
-        description: 'Use Selenium for JavaScript sites'
-        required: false
-        type: boolean
-        default: false
-      test_notification:
-        description: 'Send test notification'
-        required: false
-        type: boolean
-        default: false
-      verbose_logging:
-        description: 'Enable verbose logging'
-        required: false
-        type: boolean  
-        default: false
-
-env:
-  TZ: 'Asia/Jerusalem'  # Set timezone to Israel
 
 jobs:
-  monitor-cars:
+  check-cars:
     runs-on: ubuntu-latest
     
     steps:
@@ -52,136 +21,40 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Get current time in Israel
-      id: time
-      run: |
-        echo "Current time in Israel: $(TZ='Asia/Jerusalem' date '+%Y-%m-%d %H:%M:%S')"
-        echo "time=$(TZ='Asia/Jerusalem' date '+%H:%M')" >> $GITHUB_OUTPUT
-        echo "hour=$(TZ='Asia/Jerusalem' date '+%H')" >> $GITHUB_OUTPUT
-    
-    - name: Check if within active hours
-      id: check_hours
-      run: |
-        HOUR=${{ steps.time.outputs.hour }}
-        if [ $HOUR -ge 6 ] && [ $HOUR -le 23 ]; then
-          echo "✅ Within active hours (6 AM - Midnight)"
-          echo "should_run=true" >> $GITHUB_OUTPUT
-        else
-          echo "😴 Outside active hours - skipping"
-          echo "should_run=false" >> $GITHUB_OUTPUT
-        fi
-    
-    - name: Setup Chrome (if needed)
-      if: steps.check_hours.outputs.should_run == 'true' && (github.event.inputs.use_selenium == 'true' || secrets.USE_SELENIUM == 'true')
-      uses: browser-actions/setup-chrome@v1
-      with:
-        chrome-version: stable
-    
     - name: Cache dependencies
-      if: steps.check_hours.outputs.should_run == 'true'
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
     
     - name: Install dependencies
-      if: steps.check_hours.outputs.should_run == 'true'
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        
-        # Install Selenium if needed
-        if [[ "${{ github.event.inputs.use_selenium }}" == "true" ]] || [[ "${{ secrets.USE_SELENIUM }}" == "true" ]]; then
-          pip install selenium>=4.15.0 webdriver-manager>=4.0.1
-        fi
     
-    - name: Restore tracking data
-      if: steps.check_hours.outputs.should_run == 'true'
-      id: restore-data
-      uses: actions/cache/restore@v3
+    - name: Restore car data from cache
+      id: cache-restore
+      uses: actions/cache/restore@v4
       with:
         path: seen_cars.json
         key: car-data-${{ github.run_number }}
         restore-keys: |
           car-data-
     
-    - name: Show tracking stats
-      if: steps.check_hours.outputs.should_run == 'true'
-      run: |
-        echo "📊 === TRACKING STATS ==="
-        echo "Time in Israel: ${{ steps.time.outputs.time }}"
-        if [ -f seen_cars.json ]; then
-          TOTAL=$(cat seen_cars.json | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data.get('seen_ids', [])))")
-          LAST_UPDATE=$(cat seen_cars.json | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('last_updated', 'Unknown'))")
-          echo "Cars tracked: $TOTAL"
-          echo "Last update: $LAST_UPDATE"
-        else
-          echo "🆕 First run - no previous data"
-        fi
-        echo "===================="
-    
-    - name: Run car monitor
-      if: steps.check_hours.outputs.should_run == 'true'
+    - name: Run car scraper
       env:
         CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        USE_SELENIUM: ${{ github.event.inputs.use_selenium || secrets.USE_SELENIUM || 'false' }}
         STORAGE_FILE: seen_cars.json
       run: |
-        echo "🚗 Starting car monitor..."
-        echo "Mode: $([ "$USE_SELENIUM" == "true" ] && echo "Selenium" || echo "Basic")"
-        
-        if [[ "${{ github.event.inputs.verbose_logging }}" == "true" ]]; then
-          export VERBOSE=1
-        fi
-        
-        if [[ "$USE_SELENIUM" == "true" ]]; then
-          python advanced_scraper.py
-        else
-          python car_scraper.py
-        fi
+        python car_scraper.py
     
-    - name: Save tracking data
-      if: steps.check_hours.outputs.should_run == 'true' && always()
-      uses: actions/cache/save@v3
+    - name: Save car data to cache
+      if: always()
+      uses: actions/cache/save@v4
       with:
         path: seen_cars.json
         key: car-data-${{ github.run_number }}
-    
-    - name: Backup data as artifact
-      if: steps.check_hours.outputs.should_run == 'true' && always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: car-data-backup
-        path: seen_cars.json
-        retention-days: 30
-    
-    - name: Send test notification
-      if: github.event.inputs.test_notification == 'true'
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      run: |
-        MESSAGE="🧪 <b>Test Notification</b>%0A✅ Bot: @yad_2_scraper_bot%0A⏰ Time in Israel: ${{ steps.time.outputs.time }}%0A📊 Monitoring active 6AM-Midnight%0A🔄 Checking every 20 minutes"
-        
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-          -d "chat_id=${TELEGRAM_CHAT_ID}" \
-          -d "text=${MESSAGE}" \
-          -d "parse_mode=HTML"
-        
-        echo "✅ Test notification sent"
-    
-    - name: Summary
-      if: always()
-      run: |
-        echo "========================================="
-        echo "📊 RUN SUMMARY"
-        echo "========================================="
-        echo "Time (Israel): ${{ steps.time.outputs.time }}"
-        echo "Active hours check: ${{ steps.check_hours.outputs.should_run }}"
-        echo "Mode: ${{ env.USE_SELENIUM == 'true' && 'Selenium' || 'Basic' }}"
-        echo "Next run: ~20 minutes (if between 6AM-Midnight)"
-        echo "========================================="
