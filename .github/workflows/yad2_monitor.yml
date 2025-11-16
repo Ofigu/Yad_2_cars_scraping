@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  monitor-multiple:
+  monitor-yad2:
     runs-on: ubuntu-latest
     
     steps:
@@ -30,7 +30,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-selenium-${{ hashFiles('requirements*.txt') }}
+        key: ${{ runner.os }}-pip-selenium-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-selenium-
           ${{ runner.os }}-pip-
@@ -46,7 +46,9 @@ jobs:
       id: cache-restore
       uses: actions/cache/restore@v4
       with:
-        path: yad2_multi_data.json
+        path: |
+          yad2_data_url1.json
+          yad2_data_url2.json
         key: yad2-multi-${{ github.run_number }}
         restore-keys: |
           yad2-multi-
@@ -55,62 +57,102 @@ jobs:
       run: |
         echo "🚗 Yad2 Multi-URL Monitor"
         echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo ""
         
-        # Show how many URLs we're monitoring
-        if [ -n "${{ secrets.CAR_LISTING_URLS }}" ]; then
-          echo "Using CAR_LISTING_URLS (multiple)"
+        # Show URL 1 status
+        if [ -f yad2_data_url1.json ]; then
+          echo "📊 URL 1 - Previous data found:"
+          python3 << 'EOF'
+import json
+with open('yad2_data_url1.json', 'r') as f:
+    data = json.load(f)
+print(f"  Last total: {data.get('last_total', 0)}")
+print(f"  Checks: {len(data.get('history', []))}")
+EOF
         else
-          echo "Using CAR_LISTING_URL (single)"
+          echo "📊 URL 1 - First run"
         fi
         
-        # Show previous data if exists
-        if [ -f yad2_multi_data.json ]; then
-          echo "Previous data found:"
+        echo ""
+        
+        # Show URL 2 status
+        if [ -f yad2_data_url2.json ]; then
+          echo "📊 URL 2 - Previous data found:"
           python3 << 'EOF'
-        import json
-        with open('yad2_multi_data.json', 'r') as f:
-            data = json.load(f)
-        searches = data.get('searches', {})
-        print(f'Tracking {len(searches)} searches')
-        for key, search in list(searches.items())[:5]:
-            print(f'  - {search["name"]}: {search["last_total"]} cars')
-        EOF
+import json
+with open('yad2_data_url2.json', 'r') as f:
+    data = json.load(f)
+print(f"  Last total: {data.get('last_total', 0)}")
+print(f"  Checks: {len(data.get('history', []))}")
+EOF
         else
-          echo "First run - no previous data"
+          echo "📊 URL 2 - First run"
         fi
     
-    - name: Run multi-URL monitor
+    - name: Monitor URL 1
       env:
-        # Try CAR_LISTING_URLS first (multiple), fallback to CAR_LISTING_URL (single)
-        CAR_LISTING_URLS: ${{ secrets.CAR_LISTING_URLS }}
-        CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL }}
+        CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL1 }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        STORAGE_FILE: yad2_multi_data.json
+        STORAGE_FILE: yad2_data_url1.json
       run: |
-        echo "Starting multi-URL monitor..."
-        python yad2_multi_monitor.py
+        echo "=== Monitoring URL 1 ==="
+        python yad2_monitor.py
+        echo ""
+    
+    - name: Monitor URL 2
+      env:
+        CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL2 }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        STORAGE_FILE: yad2_data_url2.json
+      run: |
+        echo "=== Monitoring URL 2 ==="
+        python yad2_monitor.py
+        echo ""
     
     - name: Save monitoring data
       if: always()
       uses: actions/cache/save@v4
       with:
-        path: yad2_multi_data.json
+        path: |
+          yad2_data_url1.json
+          yad2_data_url2.json
         key: yad2-multi-${{ github.run_number }}
     
     - name: Show results summary
       if: always()
       run: |
         echo "=== Results Summary ==="
-        if [ -f yad2_multi_data.json ]; then
+        
+        if [ -f yad2_data_url1.json ]; then
+          echo "📊 URL 1:"
           python3 << 'EOF'
-        import json
-        with open('yad2_multi_data.json', 'r') as f:
-            data = json.load(f)
-        searches = data.get('searches', {})
-        print(f'Total searches monitored: {len(searches)}')
-        for key, search in searches.items():
-            print(f'{search["name"]}: {search["last_total"]} cars')
-        EOF
+import json
+with open('yad2_data_url1.json', 'r') as f:
+    data = json.load(f)
+print(f"  Total: {data.get('last_total', 0)} cars")
+if data.get('history'):
+    last = data['history'][-1]
+    if 'change' in last:
+        print(f"  Last change: {last['change']:+d}")
+EOF
         fi
-        echo "==================="
+        
+        echo ""
+        
+        if [ -f yad2_data_url2.json ]; then
+          echo "📊 URL 2:"
+          python3 << 'EOF'
+import json
+with open('yad2_data_url2.json', 'r') as f:
+    data = json.load(f)
+print(f"  Total: {data.get('last_total', 0)} cars")
+if data.get('history'):
+    last = data['history'][-1]
+    if 'change' in last:
+        print(f"  Last change: {last['change']:+d}")
+EOF
+        fi
+        
+        echo "====================="
