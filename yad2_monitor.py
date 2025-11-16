@@ -70,7 +70,7 @@ class Yad2CarMonitor:
             "profile.default_content_setting_values.notifications": 2
         }
         chrome_options.add_experimental_option("prefs", prefs)
-        self.driver.set_page_load_timeout(30)
+        
         self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.implicitly_wait(10)
     
@@ -420,4 +420,4 @@ def main():
     monitor.run()
 
 if __name__ == "__main__":
-    main() 
+    main()
