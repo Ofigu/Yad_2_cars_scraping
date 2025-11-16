@@ -59,32 +59,18 @@ jobs:
         echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
         echo ""
         
-        # Show URL 1 status
         if [ -f yad2_data_url1.json ]; then
           echo "📊 URL 1 - Previous data found:"
-          python3 << 'EOF'
-import json
-with open('yad2_data_url1.json', 'r') as f:
-    data = json.load(f)
-print(f"  Last total: {data.get('last_total', 0)}")
-print(f"  Checks: {len(data.get('history', []))}")
-EOF
+          python3 -c "import json; data=json.load(open('yad2_data_url1.json')); print(f\"  Last total: {data.get('last_total', 0)}\"); print(f\"  Checks: {len(data.get('history', []))}\")"
         else
           echo "📊 URL 1 - First run"
         fi
         
         echo ""
         
-        # Show URL 2 status
         if [ -f yad2_data_url2.json ]; then
           echo "📊 URL 2 - Previous data found:"
-          python3 << 'EOF'
-import json
-with open('yad2_data_url2.json', 'r') as f:
-    data = json.load(f)
-print(f"  Last total: {data.get('last_total', 0)}")
-print(f"  Checks: {len(data.get('history', []))}")
-EOF
+          python3 -c "import json; data=json.load(open('yad2_data_url2.json')); print(f\"  Last total: {data.get('last_total', 0)}\"); print(f\"  Checks: {len(data.get('history', []))}\")"
         else
           echo "📊 URL 2 - First run"
         fi
@@ -127,32 +113,14 @@ EOF
         
         if [ -f yad2_data_url1.json ]; then
           echo "📊 URL 1:"
-          python3 << 'EOF'
-import json
-with open('yad2_data_url1.json', 'r') as f:
-    data = json.load(f)
-print(f"  Total: {data.get('last_total', 0)} cars")
-if data.get('history'):
-    last = data['history'][-1]
-    if 'change' in last:
-        print(f"  Last change: {last['change']:+d}")
-EOF
+          python3 -c "import json; data=json.load(open('yad2_data_url1.json')); print(f\"  Total: {data.get('last_total', 0)} cars\"); last=data.get('history',[]); print(f\"  Last change: {last[-1].get('change',0):+d}\") if last and 'change' in last[-1] else None"
         fi
         
         echo ""
         
         if [ -f yad2_data_url2.json ]; then
           echo "📊 URL 2:"
-          python3 << 'EOF'
-import json
-with open('yad2_data_url2.json', 'r') as f:
-    data = json.load(f)
-print(f"  Total: {data.get('last_total', 0)} cars")
-if data.get('history'):
-    last = data['history'][-1]
-    if 'change' in last:
-        print(f"  Last change: {last['change']:+d}")
-EOF
+          python3 -c "import json; data=json.load(open('yad2_data_url2.json')); print(f\"  Total: {data.get('last_total', 0)} cars\"); last=data.get('history',[]); print(f\"  Last change: {last[-1].get('change',0):+d}\") if last and 'change' in last[-1] else None"
         fi
         
         echo "====================="
