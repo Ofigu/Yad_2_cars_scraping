@@ -66,14 +66,15 @@ jobs:
         # Show previous data if exists
         if [ -f yad2_multi_data.json ]; then
           echo "Previous data found:"
-          cat yad2_multi_data.json | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-searches = data.get('searches', {})
-print(f'Tracking {len(searches)} searches')
-for key, search in list(searches.items())[:5]:
-    print(f'  - {search[\"name\"]}: {search[\"last_total\"]} cars')
-"
+          python3 << 'EOF'
+        import json
+        with open('yad2_multi_data.json', 'r') as f:
+            data = json.load(f)
+        searches = data.get('searches', {})
+        print(f'Tracking {len(searches)} searches')
+        for key, search in list(searches.items())[:5]:
+            print(f'  - {search["name"]}: {search["last_total"]} cars')
+        EOF
         else
           echo "First run - no previous data"
         fi
@@ -102,13 +103,14 @@ for key, search in list(searches.items())[:5]:
       run: |
         echo "=== Results Summary ==="
         if [ -f yad2_multi_data.json ]; then
-          cat yad2_multi_data.json | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-searches = data.get('searches', {})
-print(f'Total searches monitored: {len(searches)}')
-for key, search in searches.items():
-    print(f'{search[\"name\"]}: {search[\"last_total\"]} cars')
-"
+          python3 << 'EOF'
+        import json
+        with open('yad2_multi_data.json', 'r') as f:
+            data = json.load(f)
+        searches = data.get('searches', {})
+        print(f'Total searches monitored: {len(searches)}')
+        for key, search in searches.items():
+            print(f'{search["name"]}: {search["last_total"]} cars')
+        EOF
         fi
         echo "==================="
