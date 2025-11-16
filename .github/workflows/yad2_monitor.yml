@@ -1,4 +1,4 @@
-name: Yad2 Car Monitor
+name: Yad2 Multi-URL Monitor
 
 on:
   schedule:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  monitor-yad2:
+  monitor-multiple:
     runs-on: ubuntu-latest
     
     steps:
@@ -30,7 +30,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-selenium-${{ hashFiles('**/requirements*.txt') }}
+        key: ${{ runner.os }}-pip-selenium-${{ hashFiles('requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-selenium-
           ${{ runner.os }}-pip-
@@ -42,49 +42,73 @@ jobs:
         pip install selenium>=4.15.0
         pip install webdriver-manager>=4.0.1
     
-    - name: Restore Yad2 monitoring data
+    - name: Restore monitoring data
       id: cache-restore
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
-        path: yad2_data.json
-        key: yad2-data-${{ github.run_number }}
+        path: yad2_multi_data.json
+        key: yad2-multi-${{ github.run_number }}
         restore-keys: |
-          yad2-data-
+          yad2-multi-
     
     - name: Show current status
       run: |
-        echo "🚗 Yad2 Monitor Status"
+        echo "🚗 Yad2 Multi-URL Monitor"
         echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
-        if [ -f yad2_data.json ]; then
+        
+        # Show how many URLs we're monitoring
+        if [ -n "${{ secrets.CAR_LISTING_URLS }}" ]; then
+          echo "Using CAR_LISTING_URLS (multiple)"
+        else
+          echo "Using CAR_LISTING_URL (single)"
+        fi
+        
+        # Show previous data if exists
+        if [ -f yad2_multi_data.json ]; then
           echo "Previous data found:"
-          cat yad2_data.json | python3 -c "import json,sys;data=json.load(sys.stdin);print(f\"Last total: {data.get('last_total', 0)}\");print(f\"Last check: {data.get('last_check', 'Never')}\");print(f\"History entries: {len(data.get('history', []))}\")"
+          cat yad2_multi_data.json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+searches = data.get('searches', {})
+print(f'Tracking {len(searches)} searches')
+for key, search in list(searches.items())[:5]:
+    print(f'  - {search[\"name\"]}: {search[\"last_total\"]} cars')
+"
         else
           echo "First run - no previous data"
         fi
     
-    - name: Run Yad2 monitor
+    - name: Run multi-URL monitor
       env:
+        # Try CAR_LISTING_URLS first (multiple), fallback to CAR_LISTING_URL (single)
+        CAR_LISTING_URLS: ${{ secrets.CAR_LISTING_URLS }}
         CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        STORAGE_FILE: yad2_data.json
+        STORAGE_FILE: yad2_multi_data.json
       run: |
-        echo "Starting Yad2 monitor..."
-        python yad2_monitor.py
+        echo "Starting multi-URL monitor..."
+        python yad2_multi_monitor.py
     
     - name: Save monitoring data
       if: always()
-      uses: actions/cache@v4
+      uses: actions/cache/save@v4
       with:
-        path: yad2_data.json
-        key: yad2-data-${{ github.run_number }}
+        path: yad2_multi_data.json
+        key: yad2-multi-${{ github.run_number }}
     
-    - name: Show results
+    - name: Show results summary
       if: always()
       run: |
-        echo "=== Monitor Results ==="
-        if [ -f yad2_data.json ]; then
-          echo "Updated data:"
-          cat yad2_data.json | python3 -m json.tool | head -20
+        echo "=== Results Summary ==="
+        if [ -f yad2_multi_data.json ]; then
+          cat yad2_multi_data.json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+searches = data.get('searches', {})
+print(f'Total searches monitored: {len(searches)}')
+for key, search in searches.items():
+    print(f'{search[\"name\"]}: {search[\"last_total\"]} cars')
+"
         fi
-        echo "====================="
+        echo "==================="
