@@ -76,6 +76,7 @@ jobs:
         fi
     
     - name: Monitor URL 1
+      continue-on-error: true
       env:
         CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL1 }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -83,10 +84,15 @@ jobs:
         STORAGE_FILE: yad2_data_url1.json
       run: |
         echo "=== Monitoring URL 1 ==="
+        echo "URL: $CAR_LISTING_URL"
         python yad2_monitor.py
         echo ""
     
+    - name: Wait between URLs
+      run: sleep 5
+    
     - name: Monitor URL 2
+      continue-on-error: true
       env:
         CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL2 }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -94,6 +100,7 @@ jobs:
         STORAGE_FILE: yad2_data_url2.json
       run: |
         echo "=== Monitoring URL 2 ==="
+        echo "URL: $CAR_LISTING_URL"
         python yad2_monitor.py
         echo ""
     
@@ -110,17 +117,23 @@ jobs:
       if: always()
       run: |
         echo "=== Results Summary ==="
+        echo ""
         
         if [ -f yad2_data_url1.json ]; then
-          echo "📊 URL 1:"
+          echo "📊 URL 1: ✅"
           python3 -c "import json; data=json.load(open('yad2_data_url1.json')); print(f\"  Total: {data.get('last_total', 0)} cars\"); last=data.get('history',[]); print(f\"  Last change: {last[-1].get('change',0):+d}\") if last and 'change' in last[-1] else None"
+        else
+          echo "📊 URL 1: ❌ No data file created"
         fi
         
         echo ""
         
         if [ -f yad2_data_url2.json ]; then
-          echo "📊 URL 2:"
+          echo "📊 URL 2: ✅"
           python3 -c "import json; data=json.load(open('yad2_data_url2.json')); print(f\"  Total: {data.get('last_total', 0)} cars\"); last=data.get('history',[]); print(f\"  Last change: {last[-1].get('change',0):+d}\") if last and 'change' in last[-1] else None"
+        else
+          echo "📊 URL 2: ❌ No data file created - check if URL is valid"
         fi
         
+        echo ""
         echo "====================="
