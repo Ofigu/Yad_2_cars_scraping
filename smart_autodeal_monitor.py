@@ -203,7 +203,12 @@ class SmartAutoDealMonitor:
             # 5. Handle Logic
             if self.data['last_fabia_count'] == 0 and len(self.data['history']) == 0:
                 print("First run - initializing data")
-                self.send_telegram_message(f"✅ <b>ניטור AutoDeal הופעל!</b>\nנמצאו {fabia_count} רכבי {self.target_model}.")
+                # ADDED LINK HERE:
+                self.send_telegram_message(
+                    f"✅ <b>ניטור AutoDeal הופעל!</b>\n"
+                    f"נמצאו {fabia_count} רכבי {self.target_model}.\n"
+                    f"🔗 <a href=\"{self.url}\">לצפייה בתוצאות</a>"
+                )
             
             elif new_ids:
                 print(f"Found {len(new_ids)} new listings!")
@@ -211,7 +216,7 @@ class SmartAutoDealMonitor:
                 self.send_telegram_message(self.format_notification(new_fabias))
             else:
                 print("No new specific listings found.")
-
+                
             # 6. Save Data
             self.data['last_total'] = total_count
             self.data['last_fabia_count'] = fabia_count
