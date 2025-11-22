@@ -93,12 +93,12 @@ class Yad2CarMonitor:
             total_selectors = [
                 "span[data-testid='total-items']",
                 "span[class*='totalItems']",
-                "span.results-feed_sortAndTotalBox__lFFyS",  # Your provided selector
+                "span.results-feed_sortAndTotalBox__lFFyS",  
                 "span[class*='sortAndTotalBox']",
                 "span[class*='totalResults']",
                 "div[class*='totalBox'] span",
-                "//span[contains(text(),'נמצאו')]",  # Hebrew: "Found"
-                "//span[contains(text(),'מודעות')]",  # Hebrew: "Ads"
+                "//span[contains(text(),'נמצאו')]",  
+                "//span[contains(text(),'מודעות')]",  
             ]
             
             total_text = None
