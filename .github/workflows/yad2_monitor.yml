@@ -56,7 +56,7 @@ jobs:
     
     - name: Show current status
       run: |
-        echo "🚗 Monitors Status"
+        echo "Monitors Status"
         echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
         
         echo "--- YAD2 ---"
