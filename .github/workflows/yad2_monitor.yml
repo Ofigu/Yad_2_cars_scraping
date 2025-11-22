@@ -61,18 +61,18 @@ jobs:
         
         echo "--- YAD2 ---"
         if [ -f yad2_data.json ]; then
-          cat yad2_data.json | python3 -c 'import json,sys;data=json.load(sys.stdin);print(f"Last total: {data.get(\"last_total\", 0)}")'
+          cat yad2_data.json | python3 -c 'import json,sys; data=json.load(sys.stdin); print("Last total:", data.get("last_total", 0))'
         else
           echo "No Yad2 data found"
         fi
 
         echo "--- AUTO-DEAL ---"
         if [ -f autodeal_data.json ]; then
-          cat autodeal_data.json | python3 -c 'import json,sys;data=json.load(sys.stdin);print(f"Fabias tracked: {data.get(\"last_fabia_count\", 0)}")'
+          cat autodeal_data.json | python3 -c 'import json,sys; data=json.load(sys.stdin); print("Fabias tracked:", data.get("last_fabia_count", 0))'
         else
           echo "No Auto-Deal data found"
         fi
-    
+
     - name: Run Yad2 monitor
       env:
         CAR_LISTING_URL: ${{ secrets.CAR_LISTING_URL }}
