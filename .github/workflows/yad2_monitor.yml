@@ -1,4 +1,4 @@
-name: Yad2 Car Monitor
+name: Car Monitors (Yad2 & Auto-Deal)
 
 on:
   schedule:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  monitor-yad2:
+  monitor-cars:
     runs-on: ubuntu-latest
     
     steps:
@@ -42,24 +42,35 @@ jobs:
         pip install selenium>=4.15.0
         pip install webdriver-manager>=4.0.1
     
-    - name: Restore Yad2 monitoring data
+    - name: Restore monitoring data (Both Sites)
       id: cache-restore
       uses: actions/cache@v4
       with:
-        path: yad2_data.json
-        key: yad2-data-${{ github.run_number }}
+        # We cache both JSON files
+        path: |
+          yad2_data.json
+          autodeal_data.json
+        key: car-monitors-data-${{ github.run_number }}
         restore-keys: |
-          yad2-data-
+          car-monitors-data-
     
     - name: Show current status
       run: |
-        echo "🚗 Yad2 Monitor Status"
+        echo "🚗 Monitors Status"
         echo "Time: $(date '+%Y-%m-%d %H:%M:%S')"
+        
+        echo "--- YAD2 ---"
         if [ -f yad2_data.json ]; then
-          echo "Previous data found:"
-          cat yad2_data.json | python3 -c 'import json,sys;data=json.load(sys.stdin);print(f"Last total: {data.get(\"last_total\", 0)}");print(f"Last check: {data.get(\"last_check\", \"Never\")}");print(f"History entries: {len(data.get(\"history\", []))}")'
+          cat yad2_data.json | python3 -c 'import json,sys;data=json.load(sys.stdin);print(f"Last total: {data.get(\"last_total\", 0)}")'
         else
-          echo "First run - no previous data"
+          echo "No Yad2 data found"
+        fi
+
+        echo "--- AUTO-DEAL ---"
+        if [ -f autodeal_data.json ]; then
+          cat autodeal_data.json | python3 -c 'import json,sys;data=json.load(sys.stdin);print(f"Fabias tracked: {data.get(\"last_fabia_count\", 0)}")'
+        else
+          echo "No Auto-Deal data found"
         fi
     
     - name: Run Yad2 monitor
@@ -71,20 +82,29 @@ jobs:
       run: |
         echo "Starting Yad2 monitor..."
         python yad2_monitor.py
+        
+    - name: Run Auto-Deal monitor
+      env:
+        # Using the new secret for AutoDeal
+        AUTODEAL_LISTING_URL: ${{ secrets.AUTODEAL_LISTING_URL }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        echo "Starting Auto-Deal monitor..."
+        python smart_autodeal_monitor.py
     
-    - name: Save monitoring data
+    - name: Save monitoring data (Both Sites)
       if: always()
       uses: actions/cache@v4
       with:
-        path: yad2_data.json
-        key: yad2-data-${{ github.run_number }}
+        path: |
+          yad2_data.json
+          autodeal_data.json
+        key: car-monitors-data-${{ github.run_number }}
     
     - name: Show results
       if: always()
       run: |
         echo "=== Monitor Results ==="
-        if [ -f yad2_data.json ]; then
-          echo "Updated data:"
-          cat yad2_data.json | python3 -m json.tool | head -20
-        fi
+        ls -l *.json || echo "No json files found"
         echo "====================="
