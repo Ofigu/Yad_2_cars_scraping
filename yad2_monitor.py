@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import requests
-import time
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
