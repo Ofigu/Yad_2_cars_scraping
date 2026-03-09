@@ -90,14 +90,16 @@ class Yad2Monitor:
             
             # Selectors for total results counter (in order of preference)
             total_selectors = [
+                "span[class*='feedCount']",
                 "span[data-testid='total-items']",
                 "span[class*='totalItems']",
-                "span.results-feed_sortAndTotalBox__lFFyS",  
+                "span.results-feed_sortAndTotalBox__lFFyS",
                 "span[class*='sortAndTotalBox']",
                 "span[class*='totalResults']",
                 "div[class*='totalBox'] span",
-                "//span[contains(text(),'נמצאו')]",  
-                "//span[contains(text(),'מודעות')]",  
+                "//span[contains(text(),'נמצאו')]",
+                "//span[contains(text(),'מודעות')]",
+                "//span[contains(text(),'תוצאות')]",
             ]
             
             total_text = None
@@ -142,12 +144,13 @@ class Yad2Monitor:
                 candidates = self.driver.find_elements(By.XPATH, "//*[contains(text(),'תוצאות') or contains(text(),'מודעות') or contains(text(),'נמצאו') or contains(text(),'תוצאה')]")
                 for elem in candidates:
                     text = elem.text.strip()
-                    if not text:
+                    if not text or len(text) > 80:
                         continue
                     print(f"Candidate element text: {text}")
-                    nums = re.findall(r'\d+', text)
-                    if nums:
-                        total = int(nums[0])
+                    # Require number to be adjacent to the Hebrew keyword
+                    m = re.search(r'(\d+)\s*(תוצאות|מודעות|נמצאו|תוצאה)|(תוצאות|מודעות|נמצאו|תוצאה)\s*(\d+)', text)
+                    if m:
+                        total = int(m.group(1) or m.group(4))
                         print(f"Extracted total from candidate: {total}")
                         return total
             except Exception:
