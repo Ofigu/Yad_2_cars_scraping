@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Yad2 Car Monitor - Optimized for Israeli car marketplace
-Monitors total results counter for efficient new car detection
+Yad2 Monitor - Monitors total results counter for new listing detection
 """
 
 import os
@@ -19,7 +18,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-class Yad2CarMonitor:
+class Yad2Monitor:
     def __init__(self, config: Dict):
         self.url = config['url']
         self.telegram_bot_token = config['telegram_bot_token']
@@ -41,7 +40,7 @@ class Yad2CarMonitor:
             'last_total': 0,
             'last_check': None,
             'history': [],
-            'seen_car_ids': []
+            'seen_listing_ids': []
         }
     
     def save_data(self):
@@ -200,7 +199,7 @@ class Yad2CarMonitor:
             # Get first 5 listings for new car details
             for listing in listings[:5]:
                 try:
-                    car_info = {}
+                    listing_info = {}
                     
                     # Try to get title/model
                     title_selectors = ["h3", "h4", "[class*='title']", "a[class*='title']"]
@@ -208,7 +207,7 @@ class Yad2CarMonitor:
                         try:
                             title = listing.find_element(By.CSS_SELECTOR, sel).text
                             if title:
-                                car_info['title'] = title
+                                listing_info['title'] = title
                                 break
                         except:
                             continue
@@ -219,7 +218,7 @@ class Yad2CarMonitor:
                         try:
                             price = listing.find_element(By.CSS_SELECTOR, sel).text
                             if price and ('₪' in price or any(char.isdigit() for char in price)):
-                                car_info['price'] = price
+                                listing_info['price'] = price
                                 break
                         except:
                             continue
@@ -228,16 +227,16 @@ class Yad2CarMonitor:
                     try:
                         link = listing.find_element(By.TAG_NAME, "a").get_attribute("href")
                         if link:
-                            car_info['link'] = link
+                            listing_info['link'] = link
                     except:
                         pass
                     
                     # Get any additional details
                     text = listing.text[:300]  # First 300 chars
-                    car_info['details'] = text
+                    listing_info['details'] = text
                     
-                    if car_info:
-                        new_listings.append(car_info)
+                    if listing_info:
+                        new_listings.append(listing_info)
                         
                 except Exception as e:
                     print(f"Error extracting listing details: {e}")
@@ -273,27 +272,27 @@ class Yad2CarMonitor:
         diff = new_total - old_total
         
         if diff > 0:
-            message = f"🚗 <b>רכבים חדשים ביד2!</b>\n\n"
-            message += f"📊 סה״כ עכשיו: {new_total} ({diff:+d} חדשים)\n"
+            message = f"<b>מודעות חדשות ביד2!</b>\n\n"
+            message += f"סה״כ עכשיו: {new_total} ({diff:+d} חדשים)\n"
         else:
-            message = f"📉 <b>שינוי במספר הרכבים</b>\n\n"
-            message += f"📊 סה״כ עכשיו: {new_total} ({diff:+d})\n"
-        
-        message += f"🔗 <a href=\"{self.url}\">לצפייה בכל המודעות</a>\n"
-        
+            message = f"<b>שינוי במספר המודעות</b>\n\n"
+            message += f"סה״כ עכשיו: {new_total} ({diff:+d})\n"
+
+        message += f"<a href=\"{self.url}\">לצפייה בכל המודעות</a>\n"
+
         # Add details of new listings if available
         if new_listings and diff > 0:
-            message += "\n<b>רכבים חדשים:</b>\n"
-            for i, car in enumerate(new_listings[:3], 1):
-                if car.get('title'):
-                    message += f"\n{i}. {car['title']}"
-                if car.get('price'):
-                    message += f"\n   💰 {car['price']}"
-                if car.get('link'):
-                    message += f"\n   🔗 <a href=\"{car['link']}\">צפה במודעה</a>"
+            message += "\n<b>מודעות חדשות:</b>\n"
+            for i, listing in enumerate(new_listings[:3], 1):
+                if listing.get('title'):
+                    message += f"\n{i}. {listing['title']}"
+                if listing.get('price'):
+                    message += f"\n   {listing['price']}"
+                if listing.get('link'):
+                    message += f"\n   <a href=\"{listing['link']}\">צפה במודעה</a>"
                 message += "\n"
-        
-        message += f"\n⏰ {datetime.now().strftime('%H:%M - %d/%m/%Y')}"
+
+        message += f"\n{datetime.now().strftime('%H:%M - %d/%m/%Y')}"
         
         return message
     
@@ -313,10 +312,10 @@ class Yad2CarMonitor:
             if current_total is None:
                 print("Could not get total results count")
                 self.send_telegram_message(
-                    "⚠️ <b>בעיה בניטור יד2</b>\n\n"
+                    "<b>בעיה בניטור יד2</b>\n\n"
                     "לא הצלחתי לקרוא את מספר המודעות.\n"
                     "הניטור ימשיך בבדיקה הבאה.\n\n"
-                    f"🔗 <a href=\"{self.url}\">בדוק ידנית</a>"
+                    f"<a href=\"{self.url}\">בדוק ידנית</a>"
                 )
                 return
             
@@ -333,11 +332,11 @@ class Yad2CarMonitor:
                 self.save_data()
                 
                 self.send_telegram_message(
-                    f"✅ <b>ניטור יד2 הופעל!</b>\n\n"
-                    f"📊 סה״כ רכבים כרגע: {current_total}\n"
-                    f"⏱️ בודק כל 20 דקות (06:00-00:00)\n"
-                    f"🔗 <a href=\"{self.url}\">קישור לחיפוש</a>\n\n"
-                    f"תקבל התראה כשיתווספו רכבים חדשים! 🚗"
+                    f"<b>ניטור יד2 הופעל</b>\n\n"
+                    f"סה״כ מודעות כרגע: {current_total}\n"
+                    f"בודק כל 20 דקות (06:00-00:00)\n"
+                    f"<a href=\"{self.url}\">קישור לחיפוש</a>\n\n"
+                    f"תקבל התראה כשיתווספו מודעות חדשות"
                 )
                 return
             
@@ -380,17 +379,17 @@ class Yad2CarMonitor:
                 check_count = len(self.data.get('history', []))
                 if check_count % 50 == 0 and check_count > 0:
                     self.send_telegram_message(
-                        f"📊 <b>סטטוס ניטור יד2</b>\n\n"
-                        f"✅ המערכת פעילה\n"
-                        f"📈 סה״כ רכבים: {current_total}\n"
-                        f"🔄 בדיקות שבוצעו: {check_count}\n"
-                        f"⏰ בדיקה אחרונה: {datetime.now().strftime('%H:%M')}"
+                        f"<b>סטטוס ניטור יד2</b>\n\n"
+                        f"המערכת פעילה\n"
+                        f"סה״כ מודעות: {current_total}\n"
+                        f"בדיקות שבוצעו: {check_count}\n"
+                        f"בדיקה אחרונה: {datetime.now().strftime('%H:%M')}"
                     )
             
         except Exception as e:
             print(f"Error in monitoring: {e}")
             self.send_telegram_message(
-                f"❌ <b>שגיאה בניטור</b>\n\n"
+                f"<b>שגיאה בניטור</b>\n\n"
                 f"Error: {str(e)[:200]}\n\n"
                 f"הניטור ימשיך בבדיקה הבאה."
             )
@@ -401,7 +400,7 @@ class Yad2CarMonitor:
 def main():
     """Main entry point"""
     config = {
-        'url': os.environ.get('CAR_LISTING_URL'),
+        'url': os.environ.get('LISTING_URL'),
         'telegram_bot_token': os.environ.get('TELEGRAM_BOT_TOKEN'),
         'telegram_chat_id': os.environ.get('TELEGRAM_CHAT_ID'),
         'storage_file': os.environ.get('STORAGE_FILE', 'yad2_data.json')
@@ -416,7 +415,7 @@ def main():
     if 'yad2.co.il' not in config['url']:
         print("Warning: This scraper is optimized for Yad2.co.il")
     
-    monitor = Yad2CarMonitor(config)
+    monitor = Yad2Monitor(config)
     monitor.run()
 
 if __name__ == "__main__":
