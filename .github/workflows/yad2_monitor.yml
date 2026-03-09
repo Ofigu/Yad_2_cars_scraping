@@ -67,6 +67,7 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         STORAGE_FILE: yad2_data.json
+        PYTHONUNBUFFERED: '1'
       run: |
         echo "Starting Yad2 monitor..."
         python yad2_monitor.py
