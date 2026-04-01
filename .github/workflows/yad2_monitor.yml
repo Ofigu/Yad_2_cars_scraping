@@ -32,9 +32,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-selenium-${{ hashFiles('**/requirements*.txt') }}
+        key: ${{ runner.os }}-pip-uc-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-selenium-
+          ${{ runner.os }}-pip-uc-
           ${{ runner.os }}-pip-
 
     - name: Install dependencies
@@ -42,7 +42,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4
         pip install selenium>=4.15.0
-        pip install webdriver-manager>=4.0.1
+        pip install undetected-chromedriver>=3.5.0
 
     - name: Restore monitoring data
       id: cache-restore
@@ -70,6 +70,7 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         STORAGE_FILE: yad2_data.json
         PYTHONUNBUFFERED: '1'
+        CHROME_BINARY: /opt/hostedtoolcache/setup-chrome/chromium/stable/x64/chrome
       run: |
         echo "Starting Yad2 monitor..."
         python yad2_monitor.py

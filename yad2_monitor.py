@@ -10,11 +10,10 @@ import requests
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 class Yad2Monitor:
@@ -52,29 +51,21 @@ class Yad2Monitor:
             print(f"Error saving data: {e}")
     
     def setup_driver(self):
-        """Setup Selenium driver for GitHub Actions"""
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--window-size=1920,1080')
-        chrome_options.add_argument('--lang=he-IL')  # Hebrew locale for Yad2
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-        chrome_options.add_argument('--disable-extensions')
-        chrome_options.add_argument('--disable-background-networking')
-        chrome_options.add_argument('--disable-default-apps')
-        chrome_options.add_argument('--no-first-run')
-        chrome_options.page_load_strategy = 'eager'
-        
-        # Disable images for faster loading
-        prefs = {
-            "profile.managed_default_content_settings.images": 2,
-            "profile.default_content_setting_values.notifications": 2
-        }
-        chrome_options.add_experimental_option("prefs", prefs)
-        
-        self.driver = webdriver.Chrome(options=chrome_options)
+        """Setup undetected Chrome driver to bypass WAF bot detection"""
+        options = uc.ChromeOptions()
+        options.add_argument('--headless=new')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--lang=he-IL')
+
+        chrome_binary = os.environ.get('CHROME_BINARY')
+        kwargs = {'options': options, 'version_main': None}
+        if chrome_binary:
+            kwargs['browser_executable_path'] = chrome_binary
+
+        self.driver = uc.Chrome(**kwargs)
         self.driver.implicitly_wait(10)
     
     def close_driver(self):
