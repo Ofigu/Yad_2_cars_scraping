@@ -65,7 +65,16 @@ class Yad2Monitor:
 
         # Detect Chrome major version to ensure matching ChromeDriver is downloaded
         version_main = None
-        if chrome_binary:
+        # Check env var first (set by workflow via PowerShell, which works on Windows)
+        chrome_version_env = os.environ.get('CHROME_MAIN_VERSION')
+        if chrome_version_env:
+            try:
+                version_main = int(chrome_version_env)
+                print(f"Chrome version from env: {version_main}")
+            except Exception as e:
+                print(f"Could not parse CHROME_MAIN_VERSION: {e}")
+
+        if version_main is None and chrome_binary:
             try:
                 result = subprocess.run([chrome_binary, '--version'], capture_output=True, text=True)
                 version_main = int(result.stdout.strip().split()[-1].split('.')[0])

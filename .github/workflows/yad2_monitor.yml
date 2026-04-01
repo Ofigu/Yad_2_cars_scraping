@@ -67,6 +67,15 @@ jobs:
           echo "No data found"
         }
 
+    - name: Get Chrome major version
+      id: chrome-version
+      run: |
+        $chromePath = "${{ steps.setup-chrome.outputs.chrome-path }}"
+        if (-not $chromePath) { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
+        $major = (Get-Item $chromePath).VersionInfo.ProductMajorPart
+        echo "major=$major" >> $env:GITHUB_OUTPUT
+        echo "Chrome major version: $major"
+
     - name: Run Yad2 monitor
       env:
         LISTING_URL: ${{ secrets.LISTING_URL }}
@@ -75,6 +84,7 @@ jobs:
         STORAGE_FILE: yad2_data.json
         PYTHONUNBUFFERED: '1'
         CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
+        CHROME_MAIN_VERSION: ${{ steps.chrome-version.outputs.major }}
       run: |
         echo "Starting Yad2 monitor..."
         python yad2_monitor.py
