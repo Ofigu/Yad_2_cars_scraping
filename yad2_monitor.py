@@ -172,9 +172,21 @@ class Yad2Monitor:
             except Exception:
                 pass
 
+            # Debug: dump page title and save screenshot to see what was actually loaded
+            try:
+                print(f"DEBUG page title: {self.driver.title}")
+                print(f"DEBUG current URL: {self.driver.current_url}")
+                self.driver.save_screenshot("debug_screenshot.png")
+                print("DEBUG screenshot saved to debug_screenshot.png")
+                # Print first 2000 chars of page source for inspection
+                src = self.driver.page_source
+                print(f"DEBUG page source (first 2000 chars):\n{src[:2000]}")
+            except Exception as dbg_e:
+                print(f"DEBUG dump failed: {dbg_e}")
+
             print("Warning: Could not find total results counter")
             return None
-            
+
         except Exception as e:
             print(f"Error getting total results: {e}")
             return None

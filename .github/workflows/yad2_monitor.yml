@@ -11,6 +11,8 @@ on:
 jobs:
   monitor-listings:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
     - name: Checkout repository
@@ -78,6 +80,14 @@ jobs:
       with:
         path: yad2_data.json
         key: yad2-monitor-data-${{ github.run_number }}
+
+    - name: Upload debug screenshot
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-screenshot
+        path: debug_screenshot.png
+        if-no-files-found: ignore
 
     - name: Show results
       if: always()
