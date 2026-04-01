@@ -10,7 +10,10 @@ on:
 
 jobs:
   monitor-listings:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: bash    # uses Git Bash on Windows
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -24,6 +27,7 @@ jobs:
         python-version: '3.11'
 
     - name: Setup Chrome for Selenium
+      id: setup-chrome
       uses: browser-actions/setup-chrome@v1
       with:
         chrome-version: stable
@@ -41,8 +45,8 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4
-        pip install selenium>=4.15.0
-        pip install undetected-chromedriver>=3.5.0
+        pip install 'selenium>=4.15.0'
+        pip install 'undetected-chromedriver>=3.5.0'
 
     - name: Restore monitoring data
       id: cache-restore
@@ -70,7 +74,7 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         STORAGE_FILE: yad2_data.json
         PYTHONUNBUFFERED: '1'
-        CHROME_BINARY: /opt/hostedtoolcache/setup-chrome/chromium/stable/x64/chrome
+        CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
       run: |
         echo "Starting Yad2 monitor..."
         python yad2_monitor.py

@@ -6,6 +6,21 @@ __pycache__/
 # C extensions
 *.so
 
+# GitHub Actions self-hosted runner files
+.credentials
+.credentials_rsaparams
+.runner
+*.zip
+bin/
+externals/
+_diag/
+yad2/
+config.cmd
+run.cmd
+run-helper.cmd
+run-helper.cmd.template
+run-helper.sh.template
+
 # Distribution / packaging
 .Python
 build/
