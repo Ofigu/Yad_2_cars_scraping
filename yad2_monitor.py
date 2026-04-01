@@ -52,6 +52,7 @@ class Yad2Monitor:
     
     def setup_driver(self):
         """Setup undetected Chrome driver to bypass WAF bot detection"""
+        import subprocess
         options = uc.ChromeOptions()
         options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
@@ -61,7 +62,18 @@ class Yad2Monitor:
         options.add_argument('--lang=he-IL')
 
         chrome_binary = os.environ.get('CHROME_BINARY')
-        kwargs = {'options': options, 'version_main': None}
+
+        # Detect Chrome major version to ensure matching ChromeDriver is downloaded
+        version_main = None
+        if chrome_binary:
+            try:
+                result = subprocess.run([chrome_binary, '--version'], capture_output=True, text=True)
+                version_main = int(result.stdout.strip().split()[-1].split('.')[0])
+                print(f"Detected Chrome version: {version_main}")
+            except Exception as e:
+                print(f"Could not detect Chrome version: {e}")
+
+        kwargs = {'options': options, 'version_main': version_main}
         if chrome_binary:
             kwargs['browser_executable_path'] = chrome_binary
 
