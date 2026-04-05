@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
 """
 Yad2 Monitor - Monitors total results counter for new listing detection
+Uses plain HTTP requests + __NEXT_DATA__ parsing to avoid bot detection.
 """
 
 import os
 import sys
 import json
-import requests
 import re
+import requests
 from datetime import datetime
 from typing import Dict, List, Optional
-import undetected_chromedriver as uc
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'Cache-Control': 'max-age=0',
+}
+
 
 class Yad2Monitor:
     def __init__(self, config: Dict):
@@ -22,264 +37,174 @@ class Yad2Monitor:
         self.telegram_bot_token = config['telegram_bot_token']
         self.telegram_chat_id = config['telegram_chat_id']
         self.storage_file = config.get('storage_file', 'yad2_data.json')
-        self.driver = None
+        self.session = requests.Session()
+        self.session.headers.update(HEADERS)
         self.data = self.load_data()
-        
+
     def load_data(self) -> Dict:
-        """Load previous monitoring data"""
         if os.path.exists(self.storage_file):
             try:
                 with open(self.storage_file, 'r') as f:
                     return json.load(f)
             except Exception as e:
                 print(f"Error loading data: {e}")
-        
         return {
             'last_total': 0,
             'last_check': None,
             'history': [],
             'seen_listing_ids': []
         }
-    
+
     def save_data(self):
-        """Save monitoring data"""
         try:
             self.data['last_check'] = datetime.now().isoformat()
             with open(self.storage_file, 'w') as f:
                 json.dump(self.data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving data: {e}")
-    
-    def setup_driver(self):
-        """Setup undetected Chrome driver to bypass WAF bot detection"""
-        import subprocess
-        options = uc.ChromeOptions()
-        # Do NOT use --headless=new — it's detectable by WAF. Use uc's built-in headless instead.
-        options.add_argument('--window-size=1920,1080')
-        options.add_argument('--lang=he-IL')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-first-run')
-        options.add_argument('--no-default-browser-check')
 
-        chrome_binary = os.environ.get('CHROME_BINARY')
-
-        # Detect Chrome major version to ensure matching ChromeDriver is downloaded
-        version_main = None
-        # Check env var first (set by workflow via PowerShell, which works on Windows)
-        chrome_version_env = os.environ.get('CHROME_MAIN_VERSION')
-        if chrome_version_env:
-            try:
-                version_main = int(chrome_version_env)
-                print(f"Chrome version from env: {version_main}")
-            except Exception as e:
-                print(f"Could not parse CHROME_MAIN_VERSION: {e}")
-
-        if version_main is None and chrome_binary:
-            try:
-                result = subprocess.run([chrome_binary, '--version'], capture_output=True, text=True)
-                version_main = int(result.stdout.strip().split()[-1].split('.')[0])
-                print(f"Detected Chrome version: {version_main}")
-            except Exception as e:
-                print(f"Could not detect Chrome version: {e}")
-
-        kwargs = {'options': options, 'version_main': version_main, 'headless': True}
-        if chrome_binary:
-            kwargs['browser_executable_path'] = chrome_binary
-
-        self.driver = uc.Chrome(**kwargs)
-        self.driver.implicitly_wait(10)
-    
-    def close_driver(self):
-        """Clean up driver"""
-        if self.driver:
-            self.driver.quit()
-            self.driver = None
-    
-    def get_total_results(self) -> Optional[int]:
-        """Extract total results count from Yad2"""
+    def fetch_page(self) -> Optional[str]:
+        """Fetch the Yad2 search page HTML."""
         try:
-            print(f"Loading Yad2: {self.url}")
-            self.driver.get(self.url)
-            
-            # Wait for page to load - try multiple selectors
-            wait = WebDriverWait(self.driver, 20)
-            
-            # Selectors for total results counter (in order of preference)
-            total_selectors = [
-                "span[class*='feedCount']",
-                "span[data-testid='total-items']",
-                "span[class*='totalItems']",
-                "span.results-feed_sortAndTotalBox__lFFyS",
-                "span[class*='sortAndTotalBox']",
-                "span[class*='totalResults']",
-                "div[class*='totalBox'] span",
-                "//span[contains(text(),'נמצאו')]",
-                "//span[contains(text(),'מודעות')]",
-                "//span[contains(text(),'תוצאות')]",
-            ]
-            
-            total_text = None
-            for selector in total_selectors:
-                try:
-                    if selector.startswith('//'):
-                        # XPath selector
-                        element = wait.until(EC.presence_of_element_located((By.XPATH, selector)))
-                    else:
-                        # CSS selector
-                        element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-                    
-                    total_text = element.text
-                    print(f"Found total text: {total_text}")
-                    break
-                except:
-                    continue
-            
-            if not total_text:
-                # Try getting any text that looks like a results counter
-                possible_elements = self.driver.find_elements(By.XPATH, "//span[contains(text(),'נמצאו') or contains(text(),'מודעות')]")
-                for elem in possible_elements:
-                    text = elem.text
-                    if any(char.isdigit() for char in text):
-                        total_text = text
-                        print(f"Found alternative total text: {total_text}")
-                        break
-            
-            if total_text:
-                # Extract number from text (works with Hebrew)
-                # Examples: "נמצאו 123 מודעות", "123 results", "סה״כ: 123"
-                numbers = re.findall(r'\d+', total_text)
-                if numbers:
-                    # Take the first number (usually the total)
-                    total = int(numbers[0])
-                    print(f"Extracted total: {total}")
-                    return total
-            
-            # Fallback 1: search any visible element containing Hebrew keywords and digits
-            print("Fallback: searching page elements for candidate texts containing 'תוצאות', 'מודעות' or 'נמצאו'")
-            try:
-                candidates = self.driver.find_elements(By.XPATH, "//*[contains(text(),'תוצאות') or contains(text(),'מודעות') or contains(text(),'נמצאו') or contains(text(),'תוצאה')]")
-                for elem in candidates:
-                    text = elem.text.strip()
-                    if not text or len(text) > 80:
-                        continue
-                    print(f"Candidate element text: {text}")
-                    # Require number to be adjacent to the Hebrew keyword
-                    m = re.search(r'(\d+)\s*(תוצאות|מודעות|נמצאו|תוצאה)|(תוצאות|מודעות|נמצאו|תוצאה)\s*(\d+)', text)
-                    if m:
-                        total = int(m.group(1) or m.group(4))
-                        print(f"Extracted total from candidate: {total}")
-                        return total
-            except Exception:
-                pass
-
-            # Fallback 2: search page source for the pattern '123 תוצאות' or '123 מודעות'
-            print("Fallback: searching page source for numeric counter patterns")
-            try:
-                src = self.driver.page_source
-                m = re.search(r"(\d{1,6})\s*(תוצאות|מודעות|נמצאו|תוצאה)", src)
-                if m:
-                    total = int(m.group(1))
-                    print(f"Extracted total from page source: {total}")
-                    return total
-            except Exception:
-                pass
-
-            # Debug: dump page title and save screenshot to see what was actually loaded
-            try:
-                print(f"DEBUG page title: {self.driver.title}")
-                print(f"DEBUG current URL: {self.driver.current_url}")
-                self.driver.save_screenshot("debug_screenshot.png")
-                print("DEBUG screenshot saved to debug_screenshot.png")
-                # Print first 2000 chars of page source for inspection
-                src = self.driver.page_source
-                print(f"DEBUG page source (first 2000 chars):\n{src[:2000]}")
-            except Exception as dbg_e:
-                print(f"DEBUG dump failed: {dbg_e}")
-
-            print("Warning: Could not find total results counter")
+            print(f"Fetching: {self.url}")
+            resp = self.session.get(self.url, timeout=30)
+            print(f"Status: {resp.status_code}")
+            if resp.status_code != 200:
+                print(f"Non-200 response. Body start:\n{resp.text[:500]}")
+                return None
+            return resp.text
+        except Exception as e:
+            print(f"Error fetching page: {e}")
             return None
 
-        except Exception as e:
-            print(f"Error getting total results: {e}")
+    def extract_next_data(self, html: str) -> Optional[Dict]:
+        """Extract the __NEXT_DATA__ JSON blob embedded by Next.js."""
+        match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
+        if not match:
+            print("__NEXT_DATA__ not found in page")
+            # Check if blocked
+            if 'ShieldSquare' in html or 'captcha' in html.lower():
+                print("Blocked by ShieldSquare / CAPTCHA")
             return None
-    
-    def get_new_listings(self) -> List[Dict]:
-        """Get details of new listings (first few)"""
-        new_listings = []
-        
         try:
-            # Wait for listings to load
-            wait = WebDriverWait(self.driver, 10)
-            
-            # Selectors for individual car listings on Yad2
-            listing_selectors = [
-                "div[data-testid='feed-item']",
-                "div.feed-item_feedItem__Hn7A7",
-                "div[class*='feedItem']",
-                "article[class*='item']",
-                "div.ad-container"
-            ]
-            
-            listings = []
-            for selector in listing_selectors:
-                listings = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                if listings:
-                    print(f"Found {len(listings)} listings with selector: {selector}")
-                    break
-            
-            # Get first 5 listings for new car details
-            for listing in listings[:5]:
-                try:
-                    listing_info = {}
-                    
-                    # Try to get title/model
-                    title_selectors = ["h3", "h4", "[class*='title']", "a[class*='title']"]
-                    for sel in title_selectors:
-                        try:
-                            title = listing.find_element(By.CSS_SELECTOR, sel).text
-                            if title:
-                                listing_info['title'] = title
-                                break
-                        except:
-                            continue
-                    
-                    # Try to get price
-                    price_selectors = ["[class*='price']", "span[class*='price']", "[data-testid*='price']"]
-                    for sel in price_selectors:
-                        try:
-                            price = listing.find_element(By.CSS_SELECTOR, sel).text
-                            if price and ('₪' in price or any(char.isdigit() for char in price)):
-                                listing_info['price'] = price
-                                break
-                        except:
-                            continue
-                    
-                    # Try to get link
-                    try:
-                        link = listing.find_element(By.TAG_NAME, "a").get_attribute("href")
-                        if link:
-                            listing_info['link'] = link
-                    except:
-                        pass
-                    
-                    # Get any additional details
-                    text = listing.text[:300]  # First 300 chars
-                    listing_info['details'] = text
-                    
-                    if listing_info:
-                        new_listings.append(listing_info)
-                        
-                except Exception as e:
-                    print(f"Error extracting listing details: {e}")
-                    continue
-            
+            return json.loads(match.group(1))
         except Exception as e:
-            print(f"Error getting new listings: {e}")
-        
-        return new_listings
-    
+            print(f"Failed to parse __NEXT_DATA__: {e}")
+            return None
+
+    def get_total_and_listings(self) -> tuple[Optional[int], List[Dict]]:
+        """
+        Returns (total_count, listings[]).
+        Walks common paths inside __NEXT_DATA__ where Yad2 stores feed data.
+        """
+        html = self.fetch_page()
+        if not html:
+            return None, []
+
+        next_data = self.extract_next_data(html)
+        if not next_data:
+            # Dump first 2000 chars for debugging
+            print(f"DEBUG page start:\n{html[:2000]}")
+            return None, []
+
+        # Save raw next_data for debugging on first failure
+        try:
+            with open('debug_next_data.json', 'w', encoding='utf-8') as f:
+                json.dump(next_data, f, ensure_ascii=False, indent=2)
+            print("Saved __NEXT_DATA__ to debug_next_data.json")
+        except Exception:
+            pass
+
+        total = self._find_total(next_data)
+        listings = self._find_listings(next_data)
+        return total, listings
+
+    def _find_total(self, data: Dict) -> Optional[int]:
+        """Try multiple known paths for the total results count."""
+        # Common paths seen in Yad2 Next.js structure
+        paths = [
+            # dehydrated query results
+            lambda d: d['props']['pageProps']['dehydratedState']['queries'][0]['state']['data']['data']['pagination']['total'],
+            lambda d: d['props']['pageProps']['dehydratedState']['queries'][0]['state']['data']['pagination']['total'],
+            lambda d: d['props']['pageProps']['data']['pagination']['total'],
+            lambda d: d['props']['pageProps']['feedData']['pagination']['total'],
+            lambda d: d['props']['pageProps']['initialData']['pagination']['total'],
+            lambda d: d['props']['pageProps']['totalItems'],
+            lambda d: d['props']['pageProps']['total'],
+        ]
+        for path_fn in paths:
+            try:
+                val = path_fn(data)
+                if isinstance(val, int):
+                    print(f"Found total: {val}")
+                    return val
+            except (KeyError, IndexError, TypeError):
+                continue
+
+        # Generic deep search for a 'total' key near 'pagination'
+        total = self._deep_search(data, 'total')
+        if total is not None:
+            print(f"Found total via deep search: {total}")
+        return total
+
+    def _find_listings(self, data: Dict) -> List[Dict]:
+        """Try multiple known paths for the listing items array."""
+        paths = [
+            lambda d: d['props']['pageProps']['dehydratedState']['queries'][0]['state']['data']['data']['feed']['feed_items'],
+            lambda d: d['props']['pageProps']['dehydratedState']['queries'][0]['state']['data']['feed']['feed_items'],
+            lambda d: d['props']['pageProps']['data']['feed']['feed_items'],
+            lambda d: d['props']['pageProps']['feedData']['feed_items'],
+            lambda d: d['props']['pageProps']['initialData']['feed_items'],
+            lambda d: d['props']['pageProps']['listings'],
+            lambda d: d['props']['pageProps']['items'],
+        ]
+        for path_fn in paths:
+            try:
+                items = path_fn(data)
+                if isinstance(items, list) and items:
+                    print(f"Found {len(items)} listings")
+                    return items
+            except (KeyError, IndexError, TypeError):
+                continue
+        return []
+
+    def _deep_search(self, obj, key: str, _depth=0):
+        """Recursively search for a key in nested dicts/lists (max depth 8)."""
+        if _depth > 8:
+            return None
+        if isinstance(obj, dict):
+            if key in obj and isinstance(obj[key], int):
+                return obj[key]
+            for v in obj.values():
+                result = self._deep_search(v, key, _depth + 1)
+                if result is not None:
+                    return result
+        elif isinstance(obj, list):
+            for item in obj:
+                result = self._deep_search(item, key, _depth + 1)
+                if result is not None:
+                    return result
+        return None
+
+    def _format_listing(self, item: Dict) -> Dict:
+        """Extract useful fields from a raw feed item."""
+        info = {}
+        # Yad2 feed items vary; try common field names
+        for title_key in ('title', 'heading', 'model', 'car_model'):
+            if item.get(title_key):
+                info['title'] = item[title_key]
+                break
+        for price_key in ('price', 'Price', 'priceOnly'):
+            if item.get(price_key):
+                info['price'] = str(item[price_key])
+                break
+        token = item.get('token') or item.get('id') or item.get('adNumber')
+        if token:
+            info['link'] = f"https://www.yad2.co.il/vehicles/cars/{token}"
+            info['id'] = str(token)
+        return info
+
     def send_telegram_message(self, message: str) -> bool:
-        """Send Telegram notification"""
         try:
             url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendMessage"
             payload = {
@@ -288,30 +213,25 @@ class Yad2Monitor:
                 'parse_mode': 'HTML',
                 'disable_web_page_preview': False
             }
-            
             response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
             print("Telegram notification sent")
             return True
-            
         except Exception as e:
             print(f"Error sending Telegram: {e}")
             return False
-    
+
     def format_notification(self, old_total: int, new_total: int, new_listings: List[Dict]) -> str:
-        """Format notification message"""
         diff = new_total - old_total
-        
         if diff > 0:
-            message = f"<b>מודעות חדשות ביד2!</b>\n\n"
+            message = "<b>מודעות חדשות ביד2!</b>\n\n"
             message += f"סה״כ עכשיו: {new_total} ({diff:+d} חדשים)\n"
         else:
-            message = f"<b>שינוי במספר המודעות</b>\n\n"
+            message = "<b>שינוי במספר המודעות</b>\n\n"
             message += f"סה״כ עכשיו: {new_total} ({diff:+d})\n"
 
-        message += f"<a href=\"{self.url}\">לצפייה בכל המודעות</a>\n"
+        message += f'<a href="{self.url}">לצפייה בכל המודעות</a>\n'
 
-        # Add details of new listings if available
         if new_listings and diff > 0:
             message += "\n<b>מודעות חדשות:</b>\n"
             for i, listing in enumerate(new_listings[:3], 1):
@@ -320,38 +240,33 @@ class Yad2Monitor:
                 if listing.get('price'):
                     message += f"\n   {listing['price']}"
                 if listing.get('link'):
-                    message += f"\n   <a href=\"{listing['link']}\">צפה במודעה</a>"
+                    message += f'\n   <a href="{listing["link"]}">צפה במודעה</a>'
                 message += "\n"
 
         message += f"\n{datetime.now().strftime('%H:%M - %d/%m/%Y')}"
-        
         return message
-    
+
     def run(self):
-        """Main monitoring logic"""
-        print(f"=== Yad2 Monitor Started ===")
+        print("=== Yad2 Monitor Started ===")
         print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"URL: {self.url}")
         print(f"Last total: {self.data['last_total']}")
-        
+
         try:
-            self.setup_driver()
-            
-            # Get current total
-            current_total = self.get_total_results()
-            
+            current_total, raw_listings = self.get_total_and_listings()
+
             if current_total is None:
                 print("Could not get total results count")
                 self.send_telegram_message(
                     "<b>בעיה בניטור יד2</b>\n\n"
                     "לא הצלחתי לקרוא את מספר המודעות.\n"
                     "הניטור ימשיך בבדיקה הבאה.\n\n"
-                    f"<a href=\"{self.url}\">בדוק ידנית</a>"
+                    f'<a href="{self.url}">בדוק ידנית</a>'
                 )
                 return
-            
+
             print(f"Current total: {current_total}")
-            
+
             # First run - initialize
             if self.data['last_total'] == 0:
                 print("First run - initializing")
@@ -361,52 +276,38 @@ class Yad2Monitor:
                     'total': current_total
                 })
                 self.save_data()
-                
                 self.send_telegram_message(
                     f"<b>ניטור יד2 הופעל</b>\n\n"
                     f"סה״כ מודעות כרגע: {current_total}\n"
                     f"בודק כל 20 דקות (06:00-00:00)\n"
-                    f"<a href=\"{self.url}\">קישור לחיפוש</a>\n\n"
-                    f"תקבל התראה כשיתווספו מודעות חדשות"
+                    f'<a href="{self.url}">קישור לחיפוש</a>\n\n'
+                    "תקבל התראה כשיתווספו מודעות חדשות"
                 )
                 return
-            
-            # Check for changes
+
             diff = current_total - self.data['last_total']
-            
+
             if diff != 0:
                 print(f"Change detected: {diff:+d}")
-                
-                # Get new listings details if count increased
                 new_listings = []
                 if diff > 0:
-                    new_listings = self.get_new_listings()
-                
-                # Send notification
-                message = self.format_notification(
-                    self.data['last_total'],
-                    current_total,
-                    new_listings
-                )
+                    new_listings = [self._format_listing(item) for item in raw_listings[:5]]
+                    new_listings = [l for l in new_listings if l]
+
+                message = self.format_notification(self.data['last_total'], current_total, new_listings)
                 self.send_telegram_message(message)
-                
-                # Update data
+
                 self.data['last_total'] = current_total
                 self.data['history'].append({
                     'timestamp': datetime.now().isoformat(),
                     'total': current_total,
                     'change': diff
                 })
-                
-                # Keep only last 100 history entries
                 if len(self.data['history']) > 100:
                     self.data['history'] = self.data['history'][-100:]
-                
                 self.save_data()
             else:
                 print("No change in total listings")
-                
-                # Send periodic status update (every 50 checks)
                 check_count = len(self.data.get('history', []))
                 if check_count % 50 == 0 and check_count > 0:
                     self.send_telegram_message(
@@ -416,38 +317,54 @@ class Yad2Monitor:
                         f"בדיקות שבוצעו: {check_count}\n"
                         f"בדיקה אחרונה: {datetime.now().strftime('%H:%M')}"
                     )
-            
+
         except Exception as e:
             print(f"Error in monitoring: {e}")
             self.send_telegram_message(
                 f"<b>שגיאה בניטור</b>\n\n"
                 f"Error: {str(e)[:200]}\n\n"
-                f"הניטור ימשיך בבדיקה הבאה."
+                "הניטור ימשיך בבדיקה הבאה."
             )
         finally:
-            self.close_driver()
             print("=== Monitor Completed ===")
 
+
 def main():
-    """Main entry point"""
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test', action='store_true', help='Test mode: print results to terminal, skip Telegram')
+    parser.add_argument('--url', help='Yad2 search URL (overrides LISTING_URL env var)')
+    args = parser.parse_args()
+
     config = {
-        'url': os.environ.get('LISTING_URL'),
-        'telegram_bot_token': os.environ.get('TELEGRAM_BOT_TOKEN'),
-        'telegram_chat_id': os.environ.get('TELEGRAM_CHAT_ID'),
-        'storage_file': os.environ.get('STORAGE_FILE', 'yad2_data.json')
+        'url': args.url or os.environ.get('LISTING_URL'),
+        'telegram_bot_token': os.environ.get('TELEGRAM_BOT_TOKEN', 'test'),
+        'telegram_chat_id': os.environ.get('TELEGRAM_CHAT_ID', 'test'),
+        'storage_file': os.environ.get('STORAGE_FILE', 'yad2_data.json'),
+        'test_mode': args.test,
     }
-    
-    # Validate
-    if not all([config['url'], config['telegram_bot_token'], config['telegram_chat_id']]):
-        print("Error: Missing required environment variables")
+
+    if not config['url']:
+        print("Error: Provide --url or set LISTING_URL environment variable")
         sys.exit(1)
-    
-    # Check if URL is Yad2
+
+    if args.test:
+        print("=== TEST MODE: Telegram notifications disabled ===")
+        monitor = Yad2Monitor(config)
+        total, raw_listings = monitor.get_total_and_listings()
+        print(f"\n--- Results ---")
+        print(f"Total listings found: {total}")
+        print(f"Sample listings ({len(raw_listings[:5])}):")
+        for item in raw_listings[:5]:
+            print(json.dumps(monitor._format_listing(item), ensure_ascii=False, indent=2))
+        return
+
     if 'yad2.co.il' not in config['url']:
         print("Warning: This scraper is optimized for Yad2.co.il")
-    
+
     monitor = Yad2Monitor(config)
     monitor.run()
+
 
 if __name__ == "__main__":
     main()

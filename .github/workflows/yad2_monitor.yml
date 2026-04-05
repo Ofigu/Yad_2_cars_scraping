@@ -26,30 +26,20 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Setup Chrome for Selenium
-      id: setup-chrome
-      uses: browser-actions/setup-chrome@v1
-      with:
-        chrome-version: stable
-
     - name: Cache dependencies
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-uc-${{ hashFiles('**/requirements*.txt') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-uc-
           ${{ runner.os }}-pip-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests beautifulsoup4
-        pip install "selenium>=4.15.0"
-        pip install "undetected-chromedriver>=3.5.0"
+        pip install requests
 
     - name: Restore monitoring data
-      id: cache-restore
       uses: actions/cache@v4
       with:
         path: yad2_data.json
@@ -67,15 +57,6 @@ jobs:
           echo "No data found"
         }
 
-    - name: Get Chrome major version
-      id: chrome-version
-      run: |
-        $chromePath = "${{ steps.setup-chrome.outputs.chrome-path }}"
-        if (-not $chromePath) { $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
-        $major = (Get-Item $chromePath).VersionInfo.ProductMajorPart
-        echo "major=$major" >> $env:GITHUB_OUTPUT
-        echo "Chrome major version: $major"
-
     - name: Run Yad2 monitor
       env:
         LISTING_URL: ${{ secrets.LISTING_URL }}
@@ -83,8 +64,6 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         STORAGE_FILE: yad2_data.json
         PYTHONUNBUFFERED: '1'
-        CHROME_BINARY: ${{ steps.setup-chrome.outputs.chrome-path }}
-        CHROME_MAIN_VERSION: ${{ steps.chrome-version.outputs.major }}
       run: |
         echo "Starting Yad2 monitor..."
         python yad2_monitor.py
@@ -96,12 +75,13 @@ jobs:
         path: yad2_data.json
         key: yad2-monitor-data-${{ github.run_number }}
 
-    - name: Upload debug screenshot
+    - name: Upload debug data
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: debug-screenshot
-        path: debug_screenshot.png
+        name: debug-data
+        path: |
+          debug_next_data.json
         if-no-files-found: ignore
 
     - name: Show results
