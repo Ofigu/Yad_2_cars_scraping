@@ -4,7 +4,13 @@ A GitHub Actions-based monitoring tool that tracks car listings on Yad2 (Israeli
 
 ## What it does
 
-The monitor runs every 20 minutes and checks the total number of results for your saved Yad2 search. When new cars appear, you get a Telegram notification with details about the new listings.
+The monitor runs every 20 minutes and checks the total number of results for your saved Yad2 search. When new cars appear, you get a Telegram notification with details of the new listings.
+
+## How it works
+
+Instead of using a browser, the scraper makes a plain HTTP request and extracts listing data from the `__NEXT_DATA__` JSON blob that Yad2 embeds in every page (it's a Next.js app). This avoids headless browser fingerprinting and is much faster and lighter than Selenium.
+
+The total count and history are persisted between runs using GitHub Actions cache.
 
 ## Setup
 
@@ -13,68 +19,71 @@ The monitor runs every 20 minutes and checks the total number of results for you
 - GitHub account
 - Telegram bot token (get one from [@BotFather](https://t.me/botfather))
 - Telegram chat ID (your personal chat ID or a group chat ID)
-- Yad2 search URL for the cars you want to monitor
+- A Yad2 search URL for the cars you want to monitor
 
-### Installation
+### 1. Fork this repository
 
-1. Fork or clone this repository to your GitHub account
+Fork or clone this repo to your own GitHub account.
 
-2. Go to your repository Settings → Secrets and variables → Actions
+### 2. Add GitHub Secrets
 
-3. Add the following secrets:
-   - `CAR_LISTING_URL` - Your Yad2 search URL (e.g., `https://www.yad2.co.il/vehicles/cars?manufacturer=...`)
-   - `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
-   - `TELEGRAM_CHAT_ID` - Your Telegram chat ID
+Go to your repository **Settings → Secrets and variables → Actions** and add:
 
-4. Enable GitHub Actions in your repository if not already enabled
+| Secret | Description | Example |
+|---|---|---|
+| `LISTING_URL` | Your Yad2 search URL | `https://www.yad2.co.il/vehicles/cars?manufacturer=21&year=2020--1` |
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token | `123456:ABC-DEF...` |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID | `123456789` |
+
+### 3. Enable GitHub Actions
+
+Go to the **Actions** tab in your repository and enable workflows if prompted.
+
+That's it — the monitor will run automatically on schedule.
 
 ### Getting your Telegram Chat ID
 
-Send a message to your bot, then visit:
+1. Start a conversation with your bot on Telegram
+2. Visit this URL in your browser (replace with your token):
+   ```
+   https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+   ```
+3. Look for the `"chat"` object — your ID is the `"id"` field inside it
+
+## Running manually
+
+To trigger a check immediately:
+1. Go to the **Actions** tab in your repository
+2. Select **Yad2 Listing Monitor**
+3. Click **Run workflow**
+
+## Schedule
+
+The workflow runs every 20 minutes from 6 AM to midnight UTC (roughly 9 AM–3 AM Israel time). To change it, edit the cron expression in [.github/workflows/yad2_monitor.yml](.github/workflows/yad2_monitor.yml):
+
+```yaml
+- cron: '*/20 6-23 * * *'
 ```
-https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
-```
-Look for the "chat" object to find your ID.
 
-## How it works
+## Notifications
 
-The monitor uses Selenium to load the Yad2 page and extract the total number of results. It stores this count between runs using GitHub Actions cache. When the count changes:
-
-- If cars were added: Sends notification with details of the new listings
-- If cars were removed: Sends notification about the decrease
-
-The workflow runs automatically every 20 minutes from 6 AM to midnight (Israel time). You can also trigger it manually from the Actions tab.
-
-## Configuration
-
-The monitoring schedule can be adjusted in `.github/workflows/yad2_monitor.yml`. The default schedule is:
-- Every 20 minutes
-- Between 6 AM and midnight Israel time
-- Every day
-
-To change the schedule, modify the cron expression in the workflow file.
-
-## Manual Run
-
-You can trigger the monitor manually:
-1. Go to the Actions tab in your repository
-2. Select "Yad2 Car Monitor"
-3. Click "Run workflow"
+- **New listings added**: notification with count change and details of up to 3 new listings
+- **Listings removed**: notification with count change
+- **First run**: confirmation message with the current total
 
 ## Troubleshooting
 
-If the monitor fails to extract the total count:
-- Yad2 might have changed their page structure
-- The search URL might be invalid
-- Network issues with GitHub Actions
+**403 Forbidden / blocked**: Yad2's WAF (Imperva) blocks some GitHub Actions IP ranges. If this happens consistently, trigger a new run — GitHub assigns a different IP each time. Alternatively, set up a self-hosted runner on your home PC for a stable residential IP.
 
-Check the Actions tab for detailed logs of each run.
+**Total not found**: If the scraper can't find the listing count, it uploads a `debug_next_data.json` artifact in the Actions run. Download it to inspect the raw JSON structure from Yad2.
+
+**No Telegram message received**: Double-check that `LISTING_URL`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` are all set correctly in repository secrets. The secret name must be exactly `LISTING_URL` (not `CAR_LISTING_URL`).
 
 ## Files
 
-- `yad2_monitor.py` - Main monitoring script
-- `.github/workflows/yad2_monitor.yml` - GitHub Actions workflow configuration
-- `requirements.txt` - Python dependencies
+- `yad2_monitor.py` — Main monitoring script
+- `.github/workflows/yad2_monitor.yml` — GitHub Actions workflow
+- `requirements.txt` — Python dependencies
 
 ## License
 
