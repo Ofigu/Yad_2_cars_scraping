@@ -10,12 +10,7 @@ on:
 
 jobs:
   monitor-listings:
-    runs-on: self-hosted
-    defaults:
-      run:
-        shell: powershell
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
@@ -50,12 +45,12 @@ jobs:
     - name: Show current status
       run: |
         echo "Monitor Status"
-        echo "Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-        if (Test-Path yad2_data.json) {
-          Get-Content yad2_data.json | python -c "import json,sys; data=json.load(sys.stdin); print('Last total:', data.get('last_total', 0))"
-        } else {
+        echo "Time: $(date)"
+        if [ -f yad2_data.json ]; then
+          python -c "import json; data=json.load(open('yad2_data.json')); print('Last total:', data.get('last_total', 0))"
+        else
           echo "No data found"
-        }
+        fi
 
     - name: Run Yad2 monitor
       env:
@@ -80,13 +75,12 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: debug-data
-        path: |
-          debug_next_data.json
+        path: debug_next_data.json
         if-no-files-found: ignore
 
     - name: Show results
       if: always()
       run: |
         echo "=== Monitor Results ==="
-        if (Get-ChildItem *.json -ErrorAction SilentlyContinue) { Get-ChildItem *.json | Select-Object Name, Length } else { echo "No json files found" }
+        ls -la *.json 2>/dev/null || echo "No json files found"
         echo "====================="
