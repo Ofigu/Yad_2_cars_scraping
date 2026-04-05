@@ -1,14 +1,14 @@
 # Yad2 Car Monitor
 
-A GitHub Actions-based monitoring tool that tracks car listings on Yad2 (Israeli marketplace) and sends Telegram notifications when new cars are added to your search results.
+A GitHub Actions-based monitoring tool that tracks listings on Yad2 (Israeli marketplace) and sends Telegram notifications when new listings are added to your search results.
 
 ## What it does
 
-The monitor runs every 20 minutes and checks the total number of results for your saved Yad2 search. When new cars appear, you get a Telegram notification with details of the new listings.
+The monitor runs every 20 minutes and checks the total number of results for your saved Yad2 search. When new listing appear, you get a Telegram notification with details of the new listings.
 
 ## How it works
 
-Instead of using a browser, the scraper makes a plain HTTP request and extracts listing data from the `__NEXT_DATA__` JSON blob that Yad2 embeds in every page (it's a Next.js app). This avoids headless browser fingerprinting and is much faster and lighter than Selenium.
+The scraper makes a plain HTTP request and extracts listing data from the `__NEXT_DATA__` JSON blob that Yad2 embeds in every page (it's a Next.js app).
 
 The total count and history are persisted between runs using GitHub Actions cache.
 
@@ -39,7 +39,7 @@ Go to your repository **Settings → Secrets and variables → Actions** and add
 
 Go to the **Actions** tab in your repository and enable workflows if prompted.
 
-That's it — the monitor will run automatically on schedule.
+That's it - the monitor will run automatically on schedule.
 
 ### Getting your Telegram Chat ID
 
@@ -81,9 +81,9 @@ The workflow runs every 20 minutes from 6 AM to midnight UTC (roughly 9 AM–3 A
 
 ## Files
 
-- `yad2_monitor.py` — Main monitoring script
-- `.github/workflows/yad2_monitor.yml` — GitHub Actions workflow
-- `requirements.txt` — Python dependencies
+- `yad2_monitor.py` - Main monitoring script
+- `.github/workflows/yad2_monitor.yml` - GitHub Actions workflow
+- `requirements.txt` - Python dependencies
 
 ## License
 
