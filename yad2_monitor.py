@@ -54,6 +54,9 @@ class Yad2Monitor:
             print(f"Calling API: {self.api_url}")
             resp = requests.get(self.api_url, headers=API_HEADERS, timeout=15)
             print(f"Status: {resp.status_code}")
+            print(f"Content-Type: {resp.headers.get('Content-Type', 'unknown')}")
+            print(f"Response length: {len(resp.content)} bytes")
+            print(f"Response preview: {resp.text[:300]}")
             resp.raise_for_status()
             markers = resp.json()['data']['markers']
             print(f"Got {len(markers)} listings from API")
@@ -224,7 +227,6 @@ def main():
                 print("---")
                 print(monitor._format_listing(m))
         return
-
     monitor = Yad2Monitor(config)
     monitor.run()
 
