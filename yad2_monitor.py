@@ -8,27 +8,17 @@ import os
 import sys
 import json
 import re
+import time
 import requests
+import cloudscraper
 from datetime import datetime
 from typing import Dict, List, Optional
 
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'Cache-Control': 'max-age=0',
-}
+def _make_scraper():
+    return cloudscraper.create_scraper(
+        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+    )
 
 
 class Yad2Monitor:
@@ -37,8 +27,8 @@ class Yad2Monitor:
         self.telegram_bot_token = config['telegram_bot_token']
         self.telegram_chat_id = config['telegram_chat_id']
         self.storage_file = config.get('storage_file', 'yad2_data.json')
-        self.session = requests.Session()
-        self.session.headers.update(HEADERS)
+        self.scraper = _make_scraper()
+        self._consecutive_failures = 0
         self.data = self.load_data()
 
     def load_data(self) -> Dict:
@@ -66,12 +56,28 @@ class Yad2Monitor:
     def fetch_page(self) -> Optional[str]:
         """Fetch the Yad2 search page HTML."""
         try:
+            sep = '&' if '?' in self.url else '?'
+            url = f"{self.url}{sep}_t={int(time.time() * 1000)}"
             print(f"Fetching: {self.url}")
-            resp = self.session.get(self.url, timeout=30)
+            resp = self.scraper.get(url, timeout=20)
             print(f"Status: {resp.status_code}")
             if resp.status_code != 200:
                 print(f"Non-200 response. Body start:\n{resp.text[:500]}")
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= 3:
+                    print("3 consecutive failures — recreating scraper")
+                    self.scraper = _make_scraper()
+                    self._consecutive_failures = 0
                 return None
+            if len(resp.text) < 5000:
+                print("Response too small — likely a block page")
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= 3:
+                    print("3 consecutive failures — recreating scraper")
+                    self.scraper = _make_scraper()
+                    self._consecutive_failures = 0
+                return None
+            self._consecutive_failures = 0
             return resp.text
         except Exception as e:
             print(f"Error fetching page: {e}")
