@@ -1,24 +1,17 @@
 #!/usr/bin/env python3
 """
 Yad2 Monitor - Monitors total results counter for new listing detection
-Uses plain HTTP requests + __NEXT_DATA__ parsing to avoid bot detection.
+Uses Playwright headless browser to bypass ShieldSquare bot detection.
 """
 
 import os
 import sys
 import json
 import re
-import time
 import requests
-import cloudscraper
 from datetime import datetime
 from typing import Dict, List, Optional
-
-
-def _make_scraper():
-    return cloudscraper.create_scraper(
-        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-    )
+from playwright.sync_api import sync_playwright
 
 
 class Yad2Monitor:
@@ -27,8 +20,6 @@ class Yad2Monitor:
         self.telegram_bot_token = config['telegram_bot_token']
         self.telegram_chat_id = config['telegram_chat_id']
         self.storage_file = config.get('storage_file', 'yad2_data.json')
-        self.scraper = _make_scraper()
-        self._consecutive_failures = 0
         self.data = self.load_data()
 
     def load_data(self) -> Dict:
@@ -54,31 +45,29 @@ class Yad2Monitor:
             print(f"Error saving data: {e}")
 
     def fetch_page(self) -> Optional[str]:
-        """Fetch the Yad2 search page HTML."""
+        """Fetch the Yad2 search page HTML using a headless browser."""
+        print(f"Fetching: {self.url}")
         try:
-            sep = '&' if '?' in self.url else '?'
-            url = f"{self.url}{sep}_t={int(time.time() * 1000)}"
-            print(f"Fetching: {self.url}")
-            resp = self.scraper.get(url, timeout=20)
-            print(f"Status: {resp.status_code}")
-            if resp.status_code != 200:
-                print(f"Non-200 response. Body start:\n{resp.text[:500]}")
-                self._consecutive_failures += 1
-                if self._consecutive_failures >= 3:
-                    print("3 consecutive failures — recreating scraper")
-                    self.scraper = _make_scraper()
-                    self._consecutive_failures = 0
-                return None
-            if len(resp.text) < 5000:
-                print("Response too small — likely a block page")
-                self._consecutive_failures += 1
-                if self._consecutive_failures >= 3:
-                    print("3 consecutive failures — recreating scraper")
-                    self.scraper = _make_scraper()
-                    self._consecutive_failures = 0
-                return None
-            self._consecutive_failures = 0
-            return resp.text
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    locale='he-IL',
+                    viewport={'width': 1280, 'height': 800},
+                )
+                page = context.new_page()
+                page.goto(self.url, wait_until='domcontentloaded', timeout=30000)
+                try:
+                    page.wait_for_selector('script#__NEXT_DATA__', timeout=20000)
+                except Exception:
+                    html = page.content()
+                    print("__NEXT_DATA__ not found after wait — likely blocked")
+                    print(f"DEBUG page start:\n{html[:500]}")
+                    browser.close()
+                    return None
+                html = page.content()
+                browser.close()
+                print(f"Page loaded ({len(html)} chars)")
+                return html
         except Exception as e:
             print(f"Error fetching page: {e}")
             return None
@@ -88,9 +77,6 @@ class Yad2Monitor:
         match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
         if not match:
             print("__NEXT_DATA__ not found in page")
-            # Check if blocked
-            if 'ShieldSquare' in html or 'captcha' in html.lower():
-                print("Blocked by ShieldSquare / CAPTCHA")
             return None
         try:
             return json.loads(match.group(1))
@@ -109,8 +95,6 @@ class Yad2Monitor:
 
         next_data = self.extract_next_data(html)
         if not next_data:
-            # Dump first 2000 chars for debugging
-            print(f"DEBUG page start:\n{html[:2000]}")
             return None, []
 
         # Save raw next_data for debugging on first failure
