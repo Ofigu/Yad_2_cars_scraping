@@ -36,21 +36,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Cache Playwright browsers
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/requirements*.txt') }}
-
-    - name: Install Playwright browsers
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: playwright install --with-deps chromium
-
-    - name: Install Playwright system deps (cached run)
-      if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: playwright install-deps chromium
-
     - name: Restore monitoring data
       uses: actions/cache@v4
       with:
@@ -64,13 +49,14 @@ jobs:
         echo "Monitor Status"
         echo "Time: $(date)"
         if [ -f yad2_data.json ]; then
-          python -c "import json; data=json.load(open('yad2_data.json')); print('Last total:', data.get('last_total', 0))"
+          python -c "import json; data=json.load(open('yad2_data.json')); print('Seen listings:', len(data.get('seen_listing_ids', [])))"
         else
-          echo "No data found"
+          echo "No data found (first run)"
         fi
 
     - name: Run Yad2 monitor
       env:
+        API_URL: ${{ secrets.API_URL }}
         LISTING_URL: ${{ secrets.LISTING_URL }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -86,14 +72,6 @@ jobs:
       with:
         path: yad2_data.json
         key: yad2-monitor-data-${{ github.run_number }}
-
-    - name: Upload debug data
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: debug-data
-        path: debug_next_data.json
-        if-no-files-found: ignore
 
     - name: Show results
       if: always()
