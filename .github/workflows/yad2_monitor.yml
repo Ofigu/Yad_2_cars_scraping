@@ -36,6 +36,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/requirements*.txt') }}
+
+    - name: Install Playwright browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: playwright install --with-deps chromium
+
+    - name: Install Playwright system deps (cached run)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: playwright install-deps chromium
+
     - name: Restore monitoring data
       uses: actions/cache@v4
       with:
@@ -56,7 +71,6 @@ jobs:
 
     - name: Run Yad2 monitor
       env:
-        API_URL: ${{ secrets.API_URL }}
         LISTING_URL: ${{ secrets.LISTING_URL }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
